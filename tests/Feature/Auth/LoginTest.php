@@ -2,54 +2,83 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\User;
 use Tests\TestCase;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class LoginTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_users_can_login_with_valid_credentials()
+    public function test_user_can_login_with_correct_credentials(): void
     {
         $user = User::factory()->create([
-            'email' => 'test@example.com',
-            'password' => bcrypt('password123'),
+            'email' => 'john@example.com',
+            'password' => bcrypt('password')
         ]);
 
-        $response = $this->post('/login', [
-            'email' => 'test@example.com',
-            'password' => 'password123',
+        $response = $this->postJson('/login', [
+            'email' => 'john@example.com',
+            'password' => 'password'
         ]);
 
-        $this->assertAuthenticated();
-        $response->assertRedirect('/dashboard');
+        $response->assertOk()
+            ->assertJsonStructure([
+                'user' => [
+                    'id',
+                    'name',
+                    'email',
+                    'role'
+                ],
+                'token'
+            ]);
     }
 
-    public function test_users_cannot_login_with_invalid_password()
+    public function test_user_cannot_login_with_incorrect_password(): void
     {
         $user = User::factory()->create([
-            'email' => 'test@example.com',
-            'password' => bcrypt('password123'),
+            'email' => 'john@example.com',
+            'password' => bcrypt('password')
         ]);
 
-        $response = $this->post('/login', [
-            'email' => 'test@example.com',
-            'password' => 'wrong-password',
+        $response = $this->postJson('/login', [
+            'email' => 'john@example.com',
+            'password' => 'wrong_password'
         ]);
 
-        $this->assertGuest();
-        $response->assertSessionHasErrors('email');
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['email']);
     }
 
-    public function test_users_cannot_login_with_invalid_email()
+    public function test_user_cannot_login_with_nonexistent_email(): void
     {
-        $response = $this->post('/login', [
+        $response = $this->postJson('/login', [
             'email' => 'nonexistent@example.com',
-            'password' => 'password123',
+            'password' => 'password'
         ]);
 
-        $this->assertGuest();
-        $response->assertSessionHasErrors('email');
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['email']);
+    }
+
+    public function test_user_can_logout(): void
+    {
+        $user = User::factory()->create();
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token
+        ])->postJson('/api/logout');
+
+        $response->assertOk();
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_validates_required_fields(): void
+    {
+        $response = $this->postJson('/login', []);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['email', 'password']);
     }
 } 

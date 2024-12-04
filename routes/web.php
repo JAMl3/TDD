@@ -11,6 +11,8 @@ use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\JobSearchController;
+use App\Http\Controllers\SkillsController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -31,15 +33,24 @@ Route::post('/login', [LoginController::class, 'store'])
     ->middleware('guest')
     ->name('login');
 
+// Web logout route
 Route::post('/logout', [LoginController::class, 'destroy'])
     ->middleware('auth')
     ->name('logout');
 
+// API logout route
+Route::post('/api/logout', [LoginController::class, 'destroy'])
+    ->middleware('auth:sanctum')
+    ->name('api.logout');
+
 // Job routes
 Route::middleware(['auth'])->group(function () {
-    // Routes for both developers and clients
     Route::get('/jobs', [JobController::class, 'index'])->name('jobs.index');
+    Route::get('/jobs/search', [JobSearchController::class, 'search'])->name('jobs.search');
     Route::get('/jobs/{job}', [JobController::class, 'show'])->name('jobs.show');
+    Route::post('/jobs', [JobController::class, 'store'])->name('jobs.store');
+    Route::put('/jobs/{job}', [JobController::class, 'update'])->name('jobs.update');
+    Route::delete('/jobs/{job}', [JobController::class, 'destroy'])->name('jobs.destroy');
 
     // Routes for clients only
     Route::middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':client'])->group(function () {
@@ -110,4 +121,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
         Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
     });
+
+    // Skills routes
+    Route::get('/api/skills', [SkillsController::class, 'index'])->name('api.skills.index');
 });

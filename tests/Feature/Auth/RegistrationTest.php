@@ -10,57 +10,95 @@ class RegistrationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_new_users_can_register_with_valid_data()
+    public function test_user_can_register_as_client(): void
     {
-        $response = $this->post('/register', [
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
-            'role' => 'developer', // either 'developer' or 'client'
+        $response = $this->postJson('/register', [
+            'name' => 'John Doe',
+            'email' => 'john@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role' => 'client'
         ]);
 
-        $this->assertAuthenticated();
-        $response->assertRedirect('/dashboard');
-        
-        // Assert the user was created in the database
+        $response->assertStatus(201)
+            ->assertJsonStructure([
+                'user' => [
+                    'id',
+                    'name',
+                    'email',
+                    'role'
+                ],
+                'token'
+            ]);
+
         $this->assertDatabaseHas('users', [
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-            'role' => 'developer',
+            'email' => 'john@example.com',
+            'role' => 'client'
         ]);
     }
 
-    public function test_registration_requires_valid_email()
+    public function test_user_can_register_as_developer(): void
     {
-        $response = $this->post('/register', [
-            'name' => 'Test User',
-            'email' => 'invalid-email',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
-            'role' => 'developer',
+        $response = $this->postJson('/register', [
+            'name' => 'Jane Doe',
+            'email' => 'jane@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role' => 'developer'
         ]);
 
-        $response->assertSessionHasErrors('email');
-        $this->assertDatabaseMissing('users', ['name' => 'Test User']);
+        $response->assertStatus(201)
+            ->assertJsonStructure([
+                'user' => [
+                    'id',
+                    'name',
+                    'email',
+                    'role'
+                ],
+                'token'
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'jane@example.com',
+            'role' => 'developer'
+        ]);
     }
 
-    public function test_registration_requires_unique_email()
+    public function test_validates_required_fields(): void
     {
-        // Create a user first
-        User::factory()->create([
-            'email' => 'test@example.com'
+        $response = $this->postJson('/register', []);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['name', 'email', 'password', 'role']);
+    }
+
+    public function test_validates_email_is_unique(): void
+    {
+        User::factory()->create(['email' => 'john@example.com']);
+
+        $response = $this->postJson('/register', [
+            'name' => 'John Doe',
+            'email' => 'john@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role' => 'client'
         ]);
 
-        // Try to register with the same email
-        $response = $this->post('/register', [
-            'name' => 'Another User',
-            'email' => 'test@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
-            'role' => 'developer',
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['email']);
+    }
+
+    public function test_validates_role_is_valid(): void
+    {
+        $response = $this->postJson('/register', [
+            'name' => 'John Doe',
+            'email' => 'john@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role' => 'invalid_role'
         ]);
 
-        $response->assertSessionHasErrors('email');
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['role']);
     }
 } 
