@@ -9,6 +9,8 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DeveloperProfileController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\NotificationController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -40,26 +42,21 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/jobs/{job}', [JobController::class, 'show'])->name('jobs.show');
 
     // Routes for clients only
-    Route::middleware('auth')->group(function () {
-        Route::post('/jobs', [JobController::class, 'store'])
-            ->middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':client'])
-            ->name('jobs.store');
-        Route::put('/jobs/{job}', [JobController::class, 'update'])
-            ->middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':client'])
-            ->name('jobs.update');
-        Route::delete('/jobs/{job}', [JobController::class, 'destroy'])
-            ->middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':client'])
-            ->name('jobs.destroy');
+    Route::middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':client'])->group(function () {
+        Route::post('/jobs', [JobController::class, 'store'])->name('jobs.store');
+        Route::put('/jobs/{job}', [JobController::class, 'update'])->name('jobs.update');
+        Route::delete('/jobs/{job}', [JobController::class, 'destroy'])->name('jobs.destroy');
     });
 
     // Routes for developers only
-    Route::middleware('auth')->group(function () {
-        Route::post('/jobs/{job}/apply', [JobApplicationController::class, 'store'])
-            ->middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':developer'])
-            ->name('jobs.apply');
-        Route::get('/applications', [JobApplicationController::class, 'index'])
-            ->middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':developer'])
-            ->name('applications.index');
+    Route::middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':developer'])->group(function () {
+        Route::post('/jobs/{job}/apply', [JobApplicationController::class, 'store'])->name('jobs.apply');
+        Route::get('/applications', [JobApplicationController::class, 'index'])->name('applications.index');
+    });
+
+    // Job application status updates (for clients)
+    Route::middleware([\App\Http\Middleware\EnsureUserHasRole::class . ':client'])->group(function () {
+        Route::patch('/applications/{application}', [JobApplicationController::class, 'update'])->name('applications.update');
     });
 
     // Routes for admins only
@@ -93,11 +90,24 @@ Route::middleware(['auth'])->group(function () {
 
     // Review routes
     Route::middleware(['auth'])->group(function () {
-        Route::get('/developers/{user}/reviews', [ReviewController::class, 'index'])->name('developers.reviews.index');
-        Route::get('/clients/{user}/reviews', [ReviewController::class, 'index'])->name('clients.reviews.index');
-        Route::get('/developers/{user}', [ReviewController::class, 'show'])->name('developers.show');
-        Route::get('/clients/{user}', [ReviewController::class, 'show'])->name('clients.show');
-        Route::post('/developers/{user}/reviews', [ReviewController::class, 'storeDeveloperReview'])->name('developers.reviews.store');
-        Route::post('/clients/{user}/reviews', [ReviewController::class, 'storeClientReview'])->name('clients.reviews.store');
+        Route::get('/users/{user}/reviews', [ReviewController::class, 'index'])->name('users.reviews.index');
+        Route::get('/users/{user}', [ReviewController::class, 'show'])->name('users.show');
+        Route::post('/jobs/{job}/reviews/{user}', [ReviewController::class, 'store'])->name('jobs.reviews.store');
+    });
+
+    // Payment routes
+    Route::middleware(['auth'])->group(function () {
+        Route::get('/jobs/{job}/payments', [PaymentController::class, 'index'])->name('jobs.payments.index');
+        Route::post('/jobs/{job}/payments', [PaymentController::class, 'store'])->name('jobs.payments.store');
+        Route::patch('/payments/{payment}', [PaymentController::class, 'update'])->name('payments.update');
+    });
+
+    // Notification routes
+    Route::middleware('auth')->group(function () {
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::get('/notifications/unread/count', [NotificationController::class, 'unreadCount']);
+        Route::patch('/notifications/{notification}', [NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+        Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
     });
 });

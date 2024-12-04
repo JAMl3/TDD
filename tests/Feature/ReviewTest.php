@@ -23,8 +23,8 @@ class ReviewTest extends TestCase
         parent::setUp();
         
         // Create users with different roles
-        $this->client = User::factory()->create(['role' => 'client']);
-        $this->developer = User::factory()->create(['role' => 'developer']);
+        $this->client = User::factory()->client()->create();
+        $this->developer = User::factory()->developer()->create();
         
         // Create a completed job and accepted application
         $this->job = Job::factory()
@@ -41,35 +41,10 @@ class ReviewTest extends TestCase
                 'user_id' => $this->developer->id,
                 'status' => 'accepted'
             ]);
-
-        // Debug setup
-        dump([
-            'client_id' => $this->client->id,
-            'client_role' => $this->client->role,
-            'developer_id' => $this->developer->id,
-            'developer_role' => $this->developer->role,
-            'job_id' => $this->job->id,
-            'job_user_id' => $this->job->user_id,
-            'job_status' => $this->job->status,
-            'application_id' => $this->application->id,
-            'application_job_id' => $this->application->job_id,
-            'application_user_id' => $this->application->user_id,
-            'application_status' => $this->application->status
-        ]);
     }
 
     public function test_client_can_review_developer(): void
     {
-        // Debug output
-        dump([
-            'client_id' => $this->client->id,
-            'client_role' => $this->client->role,
-            'developer_id' => $this->developer->id,
-            'developer_role' => $this->developer->role,
-            'job_status' => $this->job->status,
-            'application_status' => $this->application->status
-        ]);
-
         $reviewData = [
             'rating' => 5,
             'comment' => 'Excellent work, very professional.',
@@ -81,15 +56,13 @@ class ReviewTest extends TestCase
         ];
 
         $response = $this->actingAs($this->client)
-            ->postJson("/developers/{$this->developer->id}/reviews", $reviewData);
-
-        // Debug response
-        dump($response->json());
+            ->postJson("/jobs/{$this->job->id}/reviews/{$this->developer->id}", $reviewData);
 
         $response->assertStatus(201)
             ->assertJson([
                 'reviewer_id' => $this->client->id,
                 'reviewee_id' => $this->developer->id,
+                'job_id' => $this->job->id,
                 'rating' => 5,
                 'comment' => $reviewData['comment'],
                 'categories' => $reviewData['categories']
@@ -98,6 +71,7 @@ class ReviewTest extends TestCase
         $this->assertDatabaseHas('reviews', [
             'reviewer_id' => $this->client->id,
             'reviewee_id' => $this->developer->id,
+            'job_id' => $this->job->id,
             'rating' => 5,
             'comment' => $reviewData['comment']
         ]);
@@ -116,12 +90,13 @@ class ReviewTest extends TestCase
         ];
 
         $response = $this->actingAs($this->developer)
-            ->postJson("/clients/{$this->client->id}/reviews", $reviewData);
+            ->postJson("/jobs/{$this->job->id}/reviews/{$this->client->id}", $reviewData);
 
         $response->assertStatus(201)
             ->assertJson([
                 'reviewer_id' => $this->developer->id,
                 'reviewee_id' => $this->client->id,
+                'job_id' => $this->job->id,
                 'rating' => 4,
                 'comment' => $reviewData['comment'],
                 'categories' => $reviewData['categories']
@@ -131,7 +106,7 @@ class ReviewTest extends TestCase
     public function test_validates_review_fields(): void
     {
         $response = $this->actingAs($this->client)
-            ->postJson("/developers/{$this->developer->id}/reviews", []);
+            ->postJson("/jobs/{$this->job->id}/reviews/{$this->developer->id}", []);
 
         $response->assertStatus(422)
             ->assertJsonValidationErrors(['rating', 'comment', 'categories']);
@@ -162,22 +137,91 @@ class ReviewTest extends TestCase
         ];
 
         $response = $this->actingAs($this->client)
-            ->postJson("/developers/{$this->developer->id}/reviews", $reviewData);
+            ->postJson("/jobs/{$newJob->id}/reviews/{$this->developer->id}", $reviewData);
 
         $response->assertStatus(403)
             ->assertJson(['message' => 'Cannot review before job completion']);
     }
 
-    public function test_can_view_user_reviews(): void
+    public function test_cannot_review_if_not_part_of_job(): void
     {
-        // Create some reviews
-        Review::factory()
-            ->count(3)
-            ->forJob($this->job, $this->client, $this->developer)
-            ->create();
+        $otherClient = User::factory()->client()->create();
+        
+        $reviewData = [
+            'rating' => 5,
+            'comment' => 'Great work!',
+            'categories' => [
+                'communication' => 5,
+                'quality' => 5,
+                'timeliness' => 5
+            ]
+        ];
+
+        $response = $this->actingAs($otherClient)
+            ->postJson("/jobs/{$this->job->id}/reviews/{$this->developer->id}", $reviewData);
+
+        $response->assertStatus(403)
+            ->assertJson(['message' => 'You are not authorized to review this job']);
+    }
+
+    public function test_cannot_review_invalid_reviewee(): void
+    {
+        $otherDeveloper = User::factory()->developer()->create();
+        
+        $reviewData = [
+            'rating' => 5,
+            'comment' => 'Great work!',
+            'categories' => [
+                'communication' => 5,
+                'quality' => 5,
+                'timeliness' => 5
+            ]
+        ];
 
         $response = $this->actingAs($this->client)
-            ->getJson("/developers/{$this->developer->id}/reviews");
+            ->postJson("/jobs/{$this->job->id}/reviews/{$otherDeveloper->id}", $reviewData);
+
+        $response->assertStatus(403)
+            ->assertJson(['message' => 'Invalid reviewee']);
+    }
+
+    public function test_cannot_review_same_job_twice(): void
+    {
+        $reviewData = [
+            'rating' => 5,
+            'comment' => 'Great work!',
+            'categories' => [
+                'communication' => 5,
+                'quality' => 5,
+                'timeliness' => 5
+            ]
+        ];
+
+        // First review
+        $this->actingAs($this->client)
+            ->postJson("/jobs/{$this->job->id}/reviews/{$this->developer->id}", $reviewData);
+
+        // Second review attempt
+        $response = $this->actingAs($this->client)
+            ->postJson("/jobs/{$this->job->id}/reviews/{$this->developer->id}", $reviewData);
+
+        $response->assertStatus(422)
+            ->assertJson(['message' => 'You have already reviewed this user for this job']);
+    }
+
+    public function test_can_view_user_reviews(): void
+    {
+        Review::factory()
+            ->count(3)
+            ->create([
+                'reviewer_id' => $this->client->id,
+                'reviewee_id' => $this->developer->id,
+                'job_id' => $this->job->id,
+                'rating' => 4
+            ]);
+
+        $response = $this->actingAs($this->client)
+            ->getJson("/users/{$this->developer->id}/reviews");
 
         $response->assertOk()
             ->assertJsonCount(3, 'data')
@@ -200,14 +244,17 @@ class ReviewTest extends TestCase
 
     public function test_review_affects_user_rating(): void
     {
-        // Create multiple reviews
         Review::factory()
             ->count(3)
-            ->forJob($this->job, $this->client, $this->developer)
-            ->create(['rating' => 4]);
+            ->create([
+                'reviewer_id' => $this->client->id,
+                'reviewee_id' => $this->developer->id,
+                'job_id' => $this->job->id,
+                'rating' => 4
+            ]);
 
         $response = $this->actingAs($this->client)
-            ->getJson("/developers/{$this->developer->id}");
+            ->getJson("/users/{$this->developer->id}");
 
         $response->assertOk()
             ->assertJson([

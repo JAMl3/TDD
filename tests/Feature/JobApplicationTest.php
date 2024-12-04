@@ -34,7 +34,7 @@ class JobApplicationTest extends TestCase
     {
         $applicationData = [
             'proposal' => 'I am interested in this project and have relevant experience.',
-            'timeline' => '2 weeks',
+            'timeline' => 14,
             'budget' => 1500
         ];
 
@@ -62,7 +62,7 @@ class JobApplicationTest extends TestCase
     {
         $applicationData = [
             'proposal' => 'Test proposal',
-            'timeline' => '1 week',
+            'timeline' => 7,
             'budget' => 1000
         ];
 
@@ -81,7 +81,7 @@ class JobApplicationTest extends TestCase
 
         $applicationData = [
             'proposal' => 'Test proposal',
-            'timeline' => '1 week',
+            'timeline' => 7,
             'budget' => 1000
         ];
 
@@ -99,7 +99,7 @@ class JobApplicationTest extends TestCase
         foreach ($jobs as $job) {
             $this->actingAs($this->developer)->postJson(route('jobs.apply', $job), [
                 'proposal' => 'Test proposal',
-                'timeline' => '1 week',
+                'timeline' => 7,
                 'budget' => 1000
             ]);
         }

@@ -33,20 +33,22 @@ class RoleBasedAccessTest extends TestCase
         ]);
 
         $job = Job::factory()->create([
-            'user_id' => $client->id
+            'user_id' => $client->id,
+            'status' => 'open'
         ]);
 
-        $response = $this->actingAs($developer)->post("/jobs/{$job->id}/apply", [
+        $response = $this->actingAs($developer)->postJson("/jobs/{$job->id}/apply", [
             'proposal' => 'I am interested in this job',
-            'timeline' => '2 weeks',
+            'timeline' => 14,
             'budget' => 1000
         ]);
 
-        $response->assertRedirect();
+        $response->assertStatus(201);
         $this->assertDatabaseHas('job_applications', [
             'user_id' => $developer->id,
             'job_id' => $job->id,
-            'proposal' => 'I am interested in this job'
+            'proposal' => 'I am interested in this job',
+            'timeline' => 14
         ]);
     }
 
